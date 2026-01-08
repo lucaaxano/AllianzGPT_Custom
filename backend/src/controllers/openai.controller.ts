@@ -23,12 +23,12 @@ export const chatCompletion = async (
   next: NextFunction
 ) => {
   try {
-    const { messages, chatId, model = 'gpt-4o-mini' } = req.body;
+    const { messages, chatId, model = 'gpt-5.2' } = req.body;
 
     // System prompt für alle Chats
     const systemPrompt = {
       role: 'system' as const,
-      content: `Du bist AllianzGPT, ein hilfreicher KI-Assistent für Allianz-Mitarbeiter.
+      content: `Du bist Sena GPT, ein hilfreicher KI-Assistent.
 
 Deine Eigenschaften:
 - Du antwortest immer auf Deutsch, es sei denn, der Benutzer schreibt explizit in einer anderen Sprache

@@ -6,7 +6,7 @@ import { StoreProvider } from '@/components/StoreProvider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'AllianzGPT Custom',
+  title: 'Sena GPT',
   description: 'Internal AI Chat Workspace',
 };
 

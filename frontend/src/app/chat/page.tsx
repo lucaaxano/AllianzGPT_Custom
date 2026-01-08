@@ -516,7 +516,7 @@ export default function ChatPage() {
           <button onClick={toggleSidebar} className="text-gray-500 hover:text-[#2F3542]">
             {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
-          <h1 className="text-lg font-medium text-[#2F3542]">AllianzGPT</h1>
+          <h1 className="text-lg font-medium text-[#2F3542]">Sena GPT</h1>
         </header>
 
         {/* Messages */}

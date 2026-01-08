@@ -64,7 +64,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#FF8049] mb-4">
             <Lock className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-[#2F3542] mb-2">AllianzGPT</h1>
+          <h1 className="text-3xl font-bold text-[#2F3542] mb-2">Sena GPT</h1>
           <p className="text-[#2F3542]/60">Internal AI Chat Workspace</p>
         </div>
 
