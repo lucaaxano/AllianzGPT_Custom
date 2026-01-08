@@ -15,8 +15,8 @@ body {
 }
 
 body {
-  color: #e5e5e5;
-  background: #212121;
+  color: #2F3542;
+  background: #F5F7FA;
 }
 
 /* Custom scrollbar */
@@ -30,12 +30,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #4d4d4d;
+  background: #D1D4D8;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #5d5d5d;
+  background: #B1B4B8;
 }
 
 /* Markdown styling */
@@ -63,14 +63,14 @@ body {
 }
 
 .markdown-body code {
-  background: #2d2d2d;
+  background: #E1E4E8;
   padding: 0.2em 0.4em;
   border-radius: 4px;
   font-size: 0.9em;
 }
 
 .markdown-body pre {
-  background: #1e1e1e;
+  background: #EEF1F5;
   padding: 1em;
   border-radius: 8px;
   overflow-x: auto;
@@ -83,10 +83,10 @@ body {
 }
 
 .markdown-body blockquote {
-  border-left: 4px solid #4d4d4d;
+  border-left: 4px solid #D1D4D8;
   padding-left: 1em;
   margin-left: 0;
-  color: #a0a0a0;
+  color: #5A6270;
 }
 
 .markdown-body table {
@@ -97,13 +97,13 @@ body {
 
 .markdown-body th,
 .markdown-body td {
-  border: 1px solid #4d4d4d;
+  border: 1px solid #E1E4E8;
   padding: 0.5em;
   text-align: left;
 }
 
 .markdown-body th {
-  background: #2d2d2d;
+  background: #EEF1F5;
 }
 
 /* Animation for streaming */

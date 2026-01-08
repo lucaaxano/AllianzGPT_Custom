@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { createError } from '../middleware/error.middleware';
+import { hashPassword, verifyPassword as verifyPass } from '../utils/password.util';
 
 const prisma = new PrismaClient();
 
@@ -12,7 +13,11 @@ export const getAllWorkspaces = async (
   try {
     const workspaces = await prisma.workspace.findMany({
       orderBy: { updatedAt: 'desc' },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        updatedAt: true,
         _count: {
           select: { chats: true },
         },
@@ -38,7 +43,11 @@ export const getWorkspaceById = async (
 
     const workspace = await prisma.workspace.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        updatedAt: true,
         chats: {
           orderBy: { updatedAt: 'desc' },
           select: {
@@ -70,21 +79,81 @@ export const createWorkspace = async (
   next: NextFunction
 ) => {
   try {
-    const { name } = req.body;
+    const { name, password } = req.body;
 
     if (!name || name.trim() === '') {
       return next(createError('Workspace name is required', 400));
     }
 
+    if (!password || password.length < 4) {
+      return next(createError('Password is required (minimum 4 characters)', 400));
+    }
+
+    const passwordHash = await hashPassword(password);
+
     const workspace = await prisma.workspace.create({
       data: {
         name: name.trim(),
+        passwordHash,
+      },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
     res.status(201).json({
       success: true,
       data: workspace,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const verifyWorkspacePassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    if (!password) {
+      return next(createError('Password is required', 400));
+    }
+
+    const workspace = await prisma.workspace.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        passwordHash: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { chats: true } },
+      },
+    });
+
+    if (!workspace) {
+      return next(createError('Workspace not found', 404));
+    }
+
+    const isValid = await verifyPass(password, workspace.passwordHash);
+
+    if (!isValid) {
+      return next(createError('Invalid password', 401));
+    }
+
+    // Don't return passwordHash to client
+    const { passwordHash: _, ...workspaceData } = workspace;
+
+    res.json({
+      success: true,
+      data: workspaceData,
     });
   } catch (error) {
     next(error);

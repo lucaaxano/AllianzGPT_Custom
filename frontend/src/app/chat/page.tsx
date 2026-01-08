@@ -13,9 +13,10 @@ import {
   User,
   Bot,
   Paperclip,
-  Image as ImageIcon,
   LogOut,
   ChevronLeft,
+  Pencil,
+  FileText,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -26,10 +27,12 @@ import {
   createChat,
   getChat,
   deleteChat,
+  updateChat,
   addMessage as addMessageApi,
   streamChatCompletion,
   generateImage,
   analyzeImage,
+  analyzeDocument,
   checkAuth,
 } from '@/lib/api';
 import { useStore } from '@/stores/store';
@@ -45,6 +48,7 @@ export default function ChatPage() {
     setChats,
     addChat,
     removeChat,
+    updateChatTitle,
     currentChatId,
     setCurrentChatId,
     messages,
@@ -62,6 +66,10 @@ export default function ChatPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [attachedFile, setAttachedFile] = useState<{base64: string; name: string; type: string} | null>(null);
+  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
+  const [newChatTitle, setNewChatTitle] = useState('');
+  const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -145,6 +153,21 @@ export default function ChatPage() {
     }
   };
 
+  const handleRenameChat = async () => {
+    if (!renamingChatId || !newChatTitle.trim()) return;
+    try {
+      const response = await updateChat(renamingChatId, newChatTitle.trim());
+      if (response.success) {
+        updateChatTitle(renamingChatId, newChatTitle.trim());
+      }
+    } catch (err) {
+      console.error('Failed to rename chat:', err);
+    } finally {
+      setRenamingChatId(null);
+      setNewChatTitle('');
+    }
+  };
+
   const handleSelectChat = (chatId: string) => {
     loadChat(chatId);
     if (window.innerWidth < 768) {
@@ -168,22 +191,35 @@ export default function ChatPage() {
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const isImage = file.type.startsWith('image/');
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = (reader.result as string).split(',')[1];
-      setAttachedImage(base64);
-      setImagePreview(reader.result as string);
+      if (isImage) {
+        setAttachedImage(base64);
+        setImagePreview(reader.result as string);
+        setAttachedFile(null);
+      } else {
+        setAttachedFile({
+          base64,
+          name: file.name,
+          type: file.type,
+        });
+        setAttachedImage(null);
+        setImagePreview(null);
+      }
     };
     reader.readAsDataURL(file);
   };
 
-  const clearImage = () => {
+  const clearFile = () => {
     setAttachedImage(null);
     setImagePreview(null);
+    setAttachedFile(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -191,7 +227,7 @@ export default function ChatPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!input.trim() && !attachedImage) || isStreaming) return;
+    if ((!input.trim() && !attachedImage && !attachedFile) || isStreaming) return;
 
     let chatId = currentChatId;
 
@@ -214,10 +250,11 @@ export default function ChatPage() {
 
     const userContent = input.trim();
     const userImage = attachedImage;
+    const userFile = attachedFile;
 
     // Clear input
     setInput('');
-    clearImage();
+    clearFile();
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -259,16 +296,24 @@ export default function ChatPage() {
       return;
     }
 
+    // Build user message content
+    let userMessageContent = userContent;
+    if (userImage) {
+      userMessageContent = `[Bild angehängt]\n\n${userContent}`;
+    } else if (userFile) {
+      userMessageContent = `[Dokument: ${userFile.name}]\n\n${userContent}`;
+    }
+
     // Add user message
     const userMsg: Message = {
       id: Date.now().toString(),
       chatId,
       role: 'user',
-      content: userImage ? `[Bild angehängt]\n\n${userContent}` : userContent,
+      content: userMessageContent,
       createdAt: new Date().toISOString(),
     };
     addMessage(userMsg);
-    await addMessageApi(chatId, 'user', userImage ? `[Bild angehängt]\n\n${userContent}` : userContent);
+    await addMessageApi(chatId, 'user', userMessageContent);
 
     // Add placeholder assistant message
     const assistantMsg: Message = {
@@ -282,7 +327,27 @@ export default function ChatPage() {
 
     setIsStreaming(true);
 
-    if (userImage) {
+    if (userFile) {
+      // Document analysis
+      let fullContent = '';
+      await analyzeDocument(
+        userFile.base64,
+        userFile.name,
+        userFile.type,
+        userContent || 'Was steht in diesem Dokument? Fasse den Inhalt zusammen.',
+        chatId,
+        (chunk) => {
+          fullContent += chunk;
+          updateLastMessage(fullContent);
+        },
+        (error) => {
+          updateLastMessage(`Fehler: ${error}`);
+        },
+        () => {
+          setIsStreaming(false);
+        }
+      );
+    } else if (userImage) {
       // Image analysis
       let fullContent = '';
       await analyzeImage(
@@ -347,25 +412,25 @@ export default function ChatPage() {
 
   if (!currentWorkspace) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#212121]">
+      <div className="min-h-screen flex items-center justify-center bg-[#F5F7FA]">
         <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-[#212121]">
+    <div className="flex h-screen bg-[#F5F7FA]">
       {/* Sidebar */}
       <aside
         className={`${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } fixed md:relative md:translate-x-0 z-40 w-64 h-full bg-[#171717] border-r border-[#2d2d2d] flex flex-col transition-transform`}
+        } fixed md:relative md:translate-x-0 z-40 w-64 h-full bg-[#EEF1F5] border-r border-[#E1E4E8] flex flex-col transition-transform`}
       >
         {/* New Chat Button */}
         <div className="p-3">
           <button
             onClick={handleNewChat}
-            className="w-full flex items-center gap-2 px-4 py-3 bg-[#2d2d2d] hover:bg-[#3d3d3d] text-white rounded-lg transition-colors"
+            className="w-full flex items-center gap-2 px-4 py-3 bg-[#1A2B4C] hover:bg-[#152340] text-white rounded-lg transition-colors"
           >
             <Plus className="w-5 h-5" />
             <span>Neuer Chat</span>
@@ -385,18 +450,28 @@ export default function ChatPage() {
                 onClick={() => handleSelectChat(chat.id)}
                 className={`group flex items-center gap-2 px-3 py-2 my-1 rounded-lg cursor-pointer transition-colors ${
                   currentChatId === chat.id
-                    ? 'bg-[#2d2d2d]'
-                    : 'hover:bg-[#2d2d2d]'
+                    ? 'bg-white'
+                    : 'hover:bg-white'
                 }`}
               >
                 <MessageSquare className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <span className="flex-1 text-sm text-gray-300 truncate">
+                <span className="flex-1 text-sm text-[#2F3542] truncate">
                   {chat.title}
                 </span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDeleteChat(chat.id);
+                    setRenamingChatId(chat.id);
+                    setNewChatTitle(chat.title);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-[#1A2B4C] transition-opacity"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeletingChatId(chat.id);
                   }}
                   className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-red-400 transition-opacity"
                 >
@@ -408,10 +483,10 @@ export default function ChatPage() {
         </div>
 
         {/* Workspace Info */}
-        <div className="p-3 border-t border-[#2d2d2d]">
+        <div className="p-3 border-t border-[#E1E4E8]">
           <div
             onClick={handleWorkspaceSwitch}
-            className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-[#2d2d2d] transition-colors"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-white transition-colors"
           >
             <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center">
               <span className="text-white font-medium text-sm">
@@ -419,14 +494,14 @@ export default function ChatPage() {
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-white truncate">{currentWorkspace.name}</p>
+              <p className="text-sm text-[#2F3542] truncate">{currentWorkspace.name}</p>
               <p className="text-xs text-gray-500">Workspace wechseln</p>
             </div>
             <ChevronLeft className="w-4 h-4 text-gray-500" />
           </div>
           <button
             onClick={handleLogout}
-            className="w-full mt-2 flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-[#2d2d2d] rounded-lg transition-colors text-sm"
+            className="w-full mt-2 flex items-center gap-2 px-3 py-2 text-gray-500 hover:text-[#2F3542] hover:bg-white rounded-lg transition-colors text-sm"
           >
             <LogOut className="w-4 h-4" />
             <span>Abmelden</span>
@@ -437,26 +512,26 @@ export default function ChatPage() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="flex items-center gap-4 px-4 py-3 border-b border-[#2d2d2d] md:hidden">
-          <button onClick={toggleSidebar} className="text-gray-400 hover:text-white">
+        <header className="flex items-center gap-4 px-4 py-3 border-b border-[#E1E4E8] md:hidden">
+          <button onClick={toggleSidebar} className="text-gray-500 hover:text-[#2F3542]">
             {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
-          <h1 className="text-lg font-medium text-white">AllianzGPT</h1>
+          <h1 className="text-lg font-medium text-[#2F3542]">AllianzGPT</h1>
         </header>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center px-4">
-              <div className="w-16 h-16 rounded-full bg-primary-600 flex items-center justify-center mb-4">
+              <div className="w-16 h-16 rounded-full bg-[#FF8049] flex items-center justify-center mb-4">
                 <Bot className="w-8 h-8 text-white" />
               </div>
-              <h2 className="text-2xl font-semibold text-white mb-2">
+              <h2 className="text-2xl font-semibold text-[#2F3542] mb-2">
                 Wie kann ich helfen?
               </h2>
-              <p className="text-gray-400 text-center max-w-md">
+              <p className="text-[#2F3542]/60 text-center max-w-md">
                 Stellen Sie eine Frage, laden Sie ein Bild hoch oder verwenden Sie
-                <code className="mx-1 px-1 bg-[#2d2d2d] rounded">/generate</code>
+                <code className="mx-1 px-1 bg-[#E1E4E8] rounded">/generate</code>
                 um Bilder zu erstellen.
               </p>
             </div>
@@ -470,15 +545,15 @@ export default function ChatPage() {
                   }`}
                 >
                   {message.role !== 'user' && (
-                    <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center flex-shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-[#FF8049] flex items-center justify-center flex-shrink-0">
                       <Bot className="w-5 h-5 text-white" />
                     </div>
                   )}
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                       message.role === 'user'
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-[#2d2d2d] text-gray-100'
+                        ? 'bg-[#1A2B4C] text-white'
+                        : 'bg-white text-[#2F3542] border border-[#E1E4E8]'
                     }`}
                   >
                     {message.role === 'user' ? (
@@ -520,11 +595,18 @@ export default function ChatPage() {
                         </ReactMarkdown>
                       </div>
                     ) : (
-                      <span className="animate-pulse">●●●</span>
+                      <div className="flex items-center gap-2 text-[#2F3542]/60">
+                        <div className="flex gap-1">
+                          <span className="w-2 h-2 bg-[#FF8049] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                          <span className="w-2 h-2 bg-[#FF8049] rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                          <span className="w-2 h-2 bg-[#FF8049] rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                        </div>
+                        <span className="text-sm">Generiert...</span>
+                      </div>
                     )}
                   </div>
                   {message.role === 'user' && (
-                    <div className="w-8 h-8 rounded-full bg-[#4d4d4d] flex items-center justify-center flex-shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-[#1A2B4C] flex items-center justify-center flex-shrink-0">
                       <User className="w-5 h-5 text-white" />
                     </div>
                   )}
@@ -536,7 +618,7 @@ export default function ChatPage() {
         </div>
 
         {/* Input */}
-        <div className="border-t border-[#2d2d2d] px-4 py-4">
+        <div className="border-t border-[#E1E4E8] px-4 py-4">
           <div className="max-w-3xl mx-auto">
             {imagePreview && (
               <div className="mb-2 relative inline-block">
@@ -546,8 +628,20 @@ export default function ChatPage() {
                   className="h-20 rounded-lg"
                 />
                 <button
-                  onClick={clearImage}
+                  onClick={clearFile}
                   className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            {attachedFile && (
+              <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-white border border-[#E1E4E8] rounded-lg inline-flex">
+                <FileText className="w-5 h-5 text-[#FF8049]" />
+                <span className="text-sm text-[#2F3542]">{attachedFile.name}</span>
+                <button
+                  onClick={clearFile}
+                  className="ml-2 text-gray-500 hover:text-red-400 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -564,7 +658,7 @@ export default function ChatPage() {
                   }}
                   onKeyDown={handleKeyDown}
                   placeholder="Nachricht eingeben..."
-                  className="w-full px-4 py-3 pr-24 bg-[#2d2d2d] border border-[#4d4d4d] rounded-2xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none max-h-[200px]"
+                  className="w-full px-4 py-3 pr-24 bg-white border border-[#D1D4D8] rounded-2xl text-[#2F3542] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1A2B4C] resize-none max-h-[200px]"
                   rows={1}
                   disabled={isStreaming}
                 />
@@ -572,24 +666,25 @@ export default function ChatPage() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.json"
+                    onChange={handleFileUpload}
                     className="hidden"
                   />
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-2 text-gray-400 hover:text-white transition-colors"
+                    className="p-2 text-gray-400 hover:text-[#2F3542] transition-colors"
                     disabled={isStreaming}
+                    title="Bild oder Dokument anhängen"
                   >
-                    <ImageIcon className="w-5 h-5" />
+                    <Paperclip className="w-5 h-5" />
                   </button>
                 </div>
               </div>
               <button
                 type="submit"
-                disabled={isStreaming || (!input.trim() && !attachedImage)}
-                className="p-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+                disabled={isStreaming || (!input.trim() && !attachedImage && !attachedFile)}
+                className="p-3 bg-[#1A2B4C] hover:bg-[#152340] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
               >
                 {isStreaming ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -598,8 +693,8 @@ export default function ChatPage() {
                 )}
               </button>
             </form>
-            <p className="text-xs text-gray-500 mt-2 text-center">
-              Nutze <code className="px-1 bg-[#2d2d2d] rounded">/generate [prompt]</code> für Bildgenerierung
+            <p className="text-xs text-[#2F3542]/50 mt-2 text-center">
+              Nutze <code className="px-1 bg-[#E1E4E8] rounded">/generate [prompt]</code> für Bildgenerierung | PDF, DOCX, XLSX, TXT, CSV hochladen
             </p>
           </div>
         </div>
@@ -611,6 +706,67 @@ export default function ChatPage() {
           className="fixed inset-0 bg-black/50 z-30 md:hidden"
           onClick={toggleSidebar}
         />
+      )}
+
+      {/* Rename Chat Modal */}
+      {renamingChatId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 shadow-lg">
+            <h2 className="text-lg font-semibold text-[#2F3542] mb-4">Chat umbenennen</h2>
+            <input
+              type="text"
+              value={newChatTitle}
+              onChange={(e) => setNewChatTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleRenameChat();
+                if (e.key === 'Escape') setRenamingChatId(null);
+              }}
+              className="w-full px-4 py-2 bg-[#F5F7FA] border border-[#D1D4D8] rounded-lg text-[#2F3542] mb-4 focus:outline-none focus:ring-2 focus:ring-[#1A2B4C]"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setRenamingChatId(null)}
+                className="flex-1 py-2 bg-[#E1E4E8] hover:bg-[#D1D4D8] text-[#2F3542] rounded-lg transition-colors"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleRenameChat}
+                className="flex-1 py-2 bg-[#1A2B4C] hover:bg-[#152340] text-white rounded-lg transition-colors"
+              >
+                Speichern
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Chat Confirmation Modal */}
+      {deletingChatId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 shadow-lg">
+            <h2 className="text-lg font-semibold text-[#2F3542] mb-2">Chat löschen?</h2>
+            <p className="text-[#2F3542]/70 mb-4">Dieser Chat wird unwiderruflich gelöscht.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeletingChatId(null)}
+                className="flex-1 py-2 bg-[#E1E4E8] hover:bg-[#D1D4D8] text-[#2F3542] rounded-lg transition-colors"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={() => {
+                  handleDeleteChat(deletingChatId);
+                  setDeletingChatId(null);
+                }}
+                className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+              >
+                Löschen
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

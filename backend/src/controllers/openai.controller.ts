@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import OpenAI from 'openai';
 import { config } from '../config';
 import { createError } from '../middleware/error.middleware';
+import { extractTextFromFile, getFileSizeInMB, MAX_FILE_SIZE_MB } from '../services/file.service';
 
 const prisma = new PrismaClient();
 
@@ -219,6 +220,99 @@ export const analyzeImage = async (
     }
 
     res.write(`data: ${JSON.stringify({ error: error.message || 'An error occurred' })}\n\n`);
+    res.end();
+  }
+};
+
+export const analyzeDocument = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { fileBase64, fileName, mimeType, prompt, chatId } = req.body;
+
+    if (!fileBase64 || !fileName || !mimeType) {
+      return next(createError('File data, name, and type are required', 400));
+    }
+
+    // Check file size
+    const fileSizeMB = getFileSizeInMB(fileBase64);
+    if (fileSizeMB > MAX_FILE_SIZE_MB) {
+      return next(createError(`Datei zu groß. Maximum: ${MAX_FILE_SIZE_MB}MB`, 400));
+    }
+
+    // Convert base64 to buffer and extract text
+    const buffer = Buffer.from(fileBase64, 'base64');
+    let extractedText: string;
+
+    try {
+      extractedText = await extractTextFromFile(buffer, mimeType, fileName);
+    } catch (err: any) {
+      return next(createError(err.message || 'Fehler beim Lesen der Datei', 400));
+    }
+
+    // Truncate if too long (GPT-4 context limit)
+    const maxChars = 100000;
+    if (extractedText.length > maxChars) {
+      extractedText = extractedText.slice(0, maxChars) + '\n\n[... Text gekürzt ...]';
+    }
+
+    // Set headers for streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const systemMessage = `Der Benutzer hat ein Dokument hochgeladen: "${fileName}"
+
+Hier ist der extrahierte Inhalt des Dokuments:
+
+---
+${extractedText}
+---
+
+Beantworte die Fragen des Benutzers basierend auf diesem Dokumentinhalt.`;
+
+    const stream = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: prompt || 'Was steht in diesem Dokument? Fasse den Inhalt zusammen.' },
+      ],
+      stream: true,
+    });
+
+    let fullContent = '';
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      if (content) {
+        fullContent += content;
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      }
+    }
+
+    // Save to database if chatId provided
+    if (chatId && fullContent) {
+      await prisma.message.create({
+        data: {
+          chatId,
+          role: 'assistant',
+          content: fullContent,
+        },
+      });
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (error: any) {
+    console.error('Document Analysis Error:', error);
+
+    if (!res.headersSent) {
+      return next(createError(error.message || 'Dokumentanalyse fehlgeschlagen', 500));
+    }
+
+    res.write(`data: ${JSON.stringify({ error: error.message || 'Ein Fehler ist aufgetreten' })}\n\n`);
     res.end();
   }
 };

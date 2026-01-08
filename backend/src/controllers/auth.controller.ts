@@ -24,7 +24,7 @@ export const verifyPassword = async (
 
     res.json({
       success: true,
-      token,
+      data: { token },
       message: 'Authentication successful',
     });
   } catch (error) {

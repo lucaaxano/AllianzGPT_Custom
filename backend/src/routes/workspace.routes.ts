@@ -3,6 +3,7 @@ import {
   getAllWorkspaces,
   getWorkspaceById,
   createWorkspace,
+  verifyWorkspacePassword,
   updateWorkspace,
   deleteWorkspace,
   getWorkspaceChats,
@@ -20,6 +21,9 @@ router.get('/', getAllWorkspaces);
 
 // POST /api/workspaces - Create workspace
 router.post('/', createWorkspace);
+
+// POST /api/workspaces/:id/verify - Verify workspace password
+router.post('/:id/verify', verifyWorkspacePassword);
 
 // GET /api/workspaces/:id - Get single workspace
 router.get('/:id', getWorkspaceById);

@@ -54,11 +54,23 @@ export const getWorkspace = async (id: string): Promise<ApiResponse<Workspace & 
   return res.json();
 };
 
-export const createWorkspace = async (name: string): Promise<ApiResponse<Workspace>> => {
+export const createWorkspace = async (name: string, password: string): Promise<ApiResponse<Workspace>> => {
   const res = await fetch(`${API_URL}/api/workspaces`, {
     method: 'POST',
     headers: headers(),
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, password }),
+  });
+  return res.json();
+};
+
+export const verifyWorkspacePassword = async (
+  workspaceId: string,
+  password: string
+): Promise<ApiResponse<Workspace>> => {
+  const res = await fetch(`${API_URL}/api/workspaces/${workspaceId}/verify`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ password }),
   });
   return res.json();
 };
@@ -214,6 +226,71 @@ export const analyzeImage = async (
       method: 'POST',
       headers: headers(),
       body: JSON.stringify({ imageBase64, prompt, chatId }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      onError(error.error || 'An error occurred');
+      return;
+    }
+
+    const reader = res.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      onError('No response body');
+      return;
+    }
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') {
+            onDone();
+            return;
+          }
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.content) {
+              onChunk(parsed.content);
+            }
+            if (parsed.error) {
+              onError(parsed.error);
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      }
+    }
+    onDone();
+  } catch (error: any) {
+    onError(error.message || 'An error occurred');
+  }
+};
+
+export const analyzeDocument = async (
+  fileBase64: string,
+  fileName: string,
+  mimeType: string,
+  prompt: string,
+  chatId?: string,
+  onChunk: (content: string) => void = () => {},
+  onError: (error: string) => void = () => {},
+  onDone: () => void = () => {}
+) => {
+  try {
+    const res = await fetch(`${API_URL}/api/documents/analyze`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ fileBase64, fileName, mimeType, prompt, chatId }),
     });
 
     if (!res.ok) {

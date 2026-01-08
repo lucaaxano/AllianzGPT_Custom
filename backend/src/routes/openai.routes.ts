@@ -3,6 +3,7 @@ import {
   chatCompletion,
   generateImage,
   analyzeImage,
+  analyzeDocument,
 } from '../controllers/openai.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
 
@@ -19,5 +20,8 @@ router.post('/images/generate', generateImage);
 
 // POST /api/images/analyze - Analyze image with Vision
 router.post('/images/analyze', analyzeImage);
+
+// POST /api/documents/analyze - Analyze document
+router.post('/documents/analyze', analyzeDocument);
 
 export default router;
