@@ -14,6 +14,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - coolify
 
   # Backend API
   backend:
@@ -31,6 +33,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - coolify
 
   # Frontend
   frontend:
@@ -46,6 +50,12 @@ services:
       - "3000"
     depends_on:
       - backend
+    networks:
+      - coolify
 
 volumes:
   postgres_data:
+
+networks:
+  coolify:
+    external: true
