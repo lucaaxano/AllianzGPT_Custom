@@ -23,7 +23,23 @@ export const chatCompletion = async (
   next: NextFunction
 ) => {
   try {
-    const { messages, chatId, model = 'gpt-4o' } = req.body;
+    const { messages, chatId, model = 'gpt-4o-mini' } = req.body;
+
+    // System prompt für alle Chats
+    const systemPrompt = {
+      role: 'system' as const,
+      content: `Du bist AllianzGPT, ein hilfreicher KI-Assistent für Allianz-Mitarbeiter.
+
+Deine Eigenschaften:
+- Du antwortest immer auf Deutsch, es sei denn, der Benutzer schreibt explizit in einer anderen Sprache
+- Du bist professionell, freundlich und präzise
+- Du hilfst bei allgemeinen Fragen, Textverarbeitung, Analysen und kreativen Aufgaben
+- Bei sensiblen oder vertraulichen Themen weist du darauf hin, dass du keine echten Unternehmensdaten hast
+- Du formatierst deine Antworten übersichtlich mit Markdown wenn sinnvoll`
+    };
+
+    // System prompt an den Anfang der Messages hinzufügen
+    const messagesWithSystem = [systemPrompt, ...messages];
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return next(createError('Messages are required', 400));
@@ -37,7 +53,7 @@ export const chatCompletion = async (
     // Create OpenAI chat completion with streaming
     const stream = await openai.chat.completions.create({
       model,
-      messages: messages as ChatCompletionMessageParam[],
+      messages: messagesWithSystem as ChatCompletionMessageParam[],
       stream: true,
     });
 
