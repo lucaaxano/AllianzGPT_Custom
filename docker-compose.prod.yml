@@ -29,7 +29,8 @@ services:
     expose:
       - "3001"
     labels:
-      - "caddy_0.handle_path.0_reverse_proxy={{upstreams 3001}}"
+      caddy: gpt-api.sena-n8n.de
+      caddy.reverse_proxy: "{{upstreams 3001}}"
     depends_on:
       db:
         condition: service_healthy
@@ -48,7 +49,8 @@ services:
     expose:
       - "3000"
     labels:
-      - "caddy_0.handle_path.0_reverse_proxy={{upstreams 3000}}"
+      caddy: gpt.sena-n8n.de
+      caddy.reverse_proxy: "{{upstreams 3000}}"
     depends_on:
       - backend
     networks:
