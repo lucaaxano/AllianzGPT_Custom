@@ -2,7 +2,6 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:15-alpine
-    container_name: allianzgpt-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-allianzgpt}
@@ -21,15 +20,14 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    container_name: allianzgpt-backend
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-allianzgpt}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-allianzgpt}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ACCESS_PASSWORD: ${ACCESS_PASSWORD}
       NODE_ENV: production
-    ports:
-      - "3001:3001"
+    expose:
+      - "3001"
     depends_on:
       db:
         condition: service_healthy
@@ -41,12 +39,11 @@ services:
       dockerfile: Dockerfile.prod
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    container_name: allianzgpt-frontend
     restart: unless-stopped
     environment:
       NODE_ENV: production
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     depends_on:
       - backend
 
