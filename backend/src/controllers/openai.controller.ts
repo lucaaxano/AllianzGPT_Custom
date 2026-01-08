@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import OpenAI from 'openai';
+import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { config } from '../config';
 import { createError } from '../middleware/error.middleware';
 import { extractTextFromFile, getFileSizeInMB, MAX_FILE_SIZE_MB } from '../services/file.service';
@@ -36,7 +37,7 @@ export const chatCompletion = async (
     // Create OpenAI chat completion with streaming
     const stream = await openai.chat.completions.create({
       model,
-      messages: messages as ChatMessage[],
+      messages: messages as ChatCompletionMessageParam[],
       stream: true,
     });
 
@@ -118,8 +119,9 @@ export const generateImage = async (
       quality: quality as 'standard' | 'hd',
     });
 
-    const imageUrl = response.data[0]?.url;
-    const revisedPrompt = response.data[0]?.revised_prompt;
+    const imageData = response.data?.[0];
+    const imageUrl = imageData?.url;
+    const revisedPrompt = imageData?.revised_prompt;
 
     if (!imageUrl) {
       return next(createError('Failed to generate image', 500));
