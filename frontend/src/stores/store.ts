@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { Workspace, Chat, Message } from '@/types';
 
 interface AppState {
@@ -103,6 +103,8 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'allianzgpt-storage',
+      storage: createJSONStorage(() => localStorage),
+      skipHydration: true,
       partialize: (state) => ({
         isAuthenticated: state.isAuthenticated,
         token: state.token,
