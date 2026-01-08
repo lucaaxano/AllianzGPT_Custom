@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: allianzgpt-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: allianzgpt
+      POSTGRES_PASSWORD: allianzgpt123
+      POSTGRES_DB: allianzgpt
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U allianzgpt"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: allianzgpt-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://allianzgpt:allianzgpt123@db:5432/allianzgpt
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ACCESS_PASSWORD: ${ACCESS_PASSWORD}
+      NODE_ENV: development
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - uploads_data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    command: npm run dev
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: allianzgpt-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  uploads_data:
