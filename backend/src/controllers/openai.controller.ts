@@ -194,7 +194,7 @@ export const analyzeImage = async (
     res.setHeader('Connection', 'keep-alive');
 
     const stream = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.2',
       messages: [
         {
           role: 'user',
@@ -292,7 +292,7 @@ ${extractedText}
 Beantworte die Fragen des Benutzers basierend auf diesem Dokumentinhalt.`;
 
     const stream = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-5.2',
       messages: [
         { role: 'system', content: systemMessage },
         { role: 'user', content: prompt || 'Was steht in diesem Dokument? Fasse den Inhalt zusammen.' },
