@@ -1,6 +1,39 @@
-import { PDFParse } from 'pdf-parse';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
+
+// Disable worker for Node.js environment
+(pdfjsLib as any).GlobalWorkerOptions.workerSrc = '';
+
+export interface PDFExtractionResult {
+  text: string;
+  pageCount: number;
+}
+
+/**
+ * Extract text from PDF and return page count using pdfjs-dist
+ */
+export async function extractTextFromPDF(buffer: Buffer): Promise<PDFExtractionResult> {
+  const uint8Array = new Uint8Array(buffer);
+  const pdf = await (pdfjsLib as any).getDocument({ data: uint8Array }).promise;
+
+  let fullText = '';
+  const pageCount = pdf.numPages;
+
+  for (let i = 1; i <= pageCount; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items
+      .map((item: any) => item.str)
+      .join(' ');
+    fullText += pageText + '\n';
+  }
+
+  return {
+    text: fullText,
+    pageCount,
+  };
+}
 
 export async function extractTextFromFile(
   buffer: Buffer,
@@ -9,9 +42,8 @@ export async function extractTextFromFile(
 ): Promise<string> {
   // PDF - using pdf-parse v2 API
   if (mimeType === 'application/pdf') {
-    const parser = new PDFParse({ data: buffer });
-    const result = await parser.getText();
-    return result.text;
+    const { text } = await extractTextFromPDF(buffer);
+    return text;
   }
 
   // Word DOCX
